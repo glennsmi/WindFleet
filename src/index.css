@@ -1,0 +1,14 @@
+@import './theme/windfleet-colors.css'; /* Import custom colors */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add any custom base styles or component styles below */
+
+body {
+  /* Example custom style using Tailwind theme */
+  @apply font-sans bg-gray-100 text-gray-900;
+}
+
+/* You can add more custom SCSS here */ 

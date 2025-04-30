@@ -1,0 +1,26 @@
+
+/* WindFleet Brand Color Palette */
+
+:root {
+  /* Primary colors */
+  --color-primary: #1B8094;      /* Buttons, links, active states */
+  --color-primary-dark: #164962; /* Headers, footers, nav bars */
+  --color-teal-light: #33AAB3;   /* Hover states, secondary buttons */
+
+  /* Accent colors */
+  --color-accent-warm: #F2C14E;  /* Call-outs, badges, highlights */
+  --color-accent-coral: #E07A5F; /* Error messages, warnings */
+
+  /* Neutral colors */
+  --color-neutral-light: #F5F5F5; /* Background surfaces, cards */
+  --color-neutral-dark: #333333;  /* Body text, icons */
+
+  /* Status colors */
+  --color-success: #2ECC71;       /* Confirmations, success states */
+  --color-warning: #F4D35E;       /* Alerts, pending statuses */
+}
+
+/* Example usage:
+   .btn-primary { background-color: var(--color-primary); color: var(--color-neutral-light); }
+   .header { background-color: var(--color-primary-dark); }
+*/
