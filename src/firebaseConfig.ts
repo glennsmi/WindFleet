@@ -2,19 +2,36 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore"; // Import Firestore
+import { getStorage } from "firebase/storage"; // Import Storage
 import { getAnalytics, type Analytics } from "firebase/analytics"; // Keep Analytics as it was in the snippet
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Firebase configuration using Environment Variables
 const firebaseConfig = {
-  apiKey: "AIzaSyDuBsqnmVcE99kwQ3_ziy12FqoZL6ZRjkk",
-  authDomain: "windfleet-e4690.firebaseapp.com",
-  projectId: "windfleet-e4690",
-  storageBucket: "windfleet-e4690.appspot.com", // Corrected domain
-  messagingSenderId: "134398124258",
-  appId: "1:134398124258:web:9b1c619acfd91be19fbebb",
-  measurementId: "G-B9L03N6R6Z"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
+// Add checks for missing env variables during development
+if (
+  !firebaseConfig.apiKey ||
+  !firebaseConfig.authDomain ||
+  !firebaseConfig.projectId ||
+  !firebaseConfig.storageBucket ||
+  !firebaseConfig.messagingSenderId ||
+  !firebaseConfig.appId
+) {
+  // In development, throw an error. In production, this might be handled differently.
+  if (import.meta.env.DEV) {
+      throw new Error("One or more Firebase environment variables are missing. Check your .env file and VITE_ prefixes.");
+  } else {
+      console.error("Firebase configuration missing. App may not function correctly.");
+  }
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -22,6 +39,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize and export Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app); // Initialize and export Firestore
+export const storage = getStorage(app); // Initialize and export Storage
 
 // Initialize Firebase Analytics (optional, but included in user's snippet)
 let analytics: Analytics | null = null;

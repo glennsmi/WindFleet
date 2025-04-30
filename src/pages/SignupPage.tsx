@@ -61,7 +61,7 @@ function SignupPage() {
     <div className="flex items-center justify-center min-h-screen bg-primary font-sans">
       <div className="w-full max-w-md px-8 py-10 bg-white rounded-lg shadow-xl">
         <div className="flex justify-center mb-6">
-          <img src="/windfleet logo.png" alt="WindFleet Logo" className="w-36 h-36" />
+          <img src="/WindFleet Logo SVG.svg" alt="WindFleet Logo" className="w-36 h-36" />
         </div>
         <h3 className="text-2xl font-bold text-center text-neutral-dark mb-8">Create your account</h3>
         <form onSubmit={handleEmailSignup}>

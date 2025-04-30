@@ -12,6 +12,7 @@ import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import RawDataPage from './pages/RawDataPage';
 import SettingsPage from './pages/SettingsPage';
+import NotFoundPage from './pages/NotFoundPage'; // Import the new 404 page
 // Removed './App.css' import
 
 function App() {
@@ -69,8 +70,8 @@ function App() {
         {/* Add other protected routes here */}
       </Route>
 
-      {/* Optional: Catch-all route for 404 Not Found */}
-      <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />
+      {/* Catch-all route - Render NotFoundPage */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

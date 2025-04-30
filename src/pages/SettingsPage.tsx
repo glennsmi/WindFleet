@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { auth, db } from '../firebaseConfig'; // Import auth and db
-import { doc, getDoc, setDoc } from 'firebase/firestore'; // Import Firestore functions
-import { User } from 'firebase/auth'; // Import User type
+import React, { useState, useEffect, useRef } from 'react';
+import { auth, db, storage } from '../firebaseConfig'; // Import auth, db, and storage
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; // Import Firestore functions
+import { User, updateProfile } from 'firebase/auth'; // Import User type and updateProfile
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"; // Import storage functions
 
 // Define an interface for the settings structure
 interface AppSettings {
@@ -16,6 +17,13 @@ interface UserProfile {
   firstName: string;
   lastName: string;
 }
+
+// Helper function to get initials
+const getInitials = (firstName: string, lastName: string): string => {
+  const firstInitial = firstName ? firstName[0] : '';
+  const lastInitial = lastName ? lastName[0] : '';
+  return `${firstInitial}${lastInitial}`.toUpperCase();
+};
 
 const SettingsPage: React.FC = () => {
   // State for user profile
@@ -32,13 +40,19 @@ const SettingsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [photoURL, setPhotoURL] = useState<string | null>(null); // Local state for displayed photo URL
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null); // Ref for hidden file input
 
   // Update current user state on auth changes
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(user => {
       setCurrentUser(user);
-      if (!user) {
-        // Handle case where user logs out while on settings page (optional)
+      if (user) {
+          setPhotoURL(user.photoURL); // Initialize photoURL state from auth user
+      } else {
+        // Handle logout
         setError("User not logged in.");
         setIsLoading(false);
       }
@@ -57,18 +71,16 @@ const SettingsPage: React.FC = () => {
           const docSnap = await getDoc(userDocRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
-            // Load profile fields
-            setProfile({
-                firstName: data.firstName || '', // Default to empty string if not set
-                lastName: data.lastName || '',
-            });
-            // Load app settings
+            setProfile({ firstName: data.firstName || '', lastName: data.lastName || '' });
+            // Use photoURL from Firestore if available, otherwise fallback to auth user's photoURL
+            setPhotoURL(data.photoURL || currentUser.photoURL);
             if (data.appSettings) {
-                const loadedSettings = data.appSettings as AppSettings;
-                setSettings(prev => ({ ...prev, ...loadedSettings }));
+              setSettings(prev => ({ ...prev, ...data.appSettings }));
             }
           } else {
             console.log("No user document found, using defaults.");
+             // Still use auth user photo if available even if no doc exists
+            setPhotoURL(currentUser.photoURL);
           }
         } catch (err: any) {
           console.error("Error fetching user data:", err);
@@ -100,7 +112,76 @@ const SettingsPage: React.FC = () => {
     setError(null);
   };
 
-  // Save profile and settings handler
+  // Trigger file input click
+  const handleAvatarClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  // Handle Photo Upload
+  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!currentUser) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Basic validation (e.g., image type, size)
+    if (!file.type.startsWith('image/')) {
+        setError('Please select an image file.');
+        return;
+    }
+    // Example size limit (e.g., 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        setError('File size should be less than 2MB.');
+        return;
+    }
+
+    setIsUploadingPhoto(true);
+    setError(null);
+    setSuccessMessage(null);
+    setUploadProgress(0);
+
+    const fileExtension = file.name.split('.').pop();
+    const uniqueFilename = `${Date.now()}.${fileExtension}`;
+    const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${uniqueFilename}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (uploadError) => {
+        console.error("Upload failed:", uploadError);
+        setError(`Upload failed: ${uploadError.code}`);
+        setIsUploadingPhoto(false);
+        setUploadProgress(0);
+      },
+      async () => {
+        // Upload completed successfully, now get the download URL
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          
+          // Update Firestore document
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          await updateDoc(userDocRef, { photoURL: downloadURL });
+
+          // Optionally update the Firebase Auth user profile photoURL too
+          // await updateProfile(currentUser, { photoURL: downloadURL });
+          
+          setPhotoURL(downloadURL); // Update local state to show new photo
+          setSuccessMessage("Profile picture updated!");
+
+        } catch (finalError: any) {
+          console.error("Error updating profile:", finalError);
+          setError(`Failed to update profile: ${finalError.code}`);
+        } finally {
+            setIsUploadingPhoto(false);
+            setUploadProgress(0);
+        }
+      }
+    );
+  };
+
+  // Save ONLY profile name and app settings handler
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) {
@@ -113,7 +194,6 @@ const SettingsPage: React.FC = () => {
     setSuccessMessage(null);
 
     const userDocRef = doc(db, 'users', currentUser.uid);
-
     const settingsToSave: AppSettings = {
       availabilityDays: Number(settings.availabilityDays) || 0,
       requiredConstructionDays: Number(settings.requiredConstructionDays) || 0,
@@ -121,7 +201,7 @@ const SettingsPage: React.FC = () => {
       turbinesPerMaintenanceVessel: Number(settings.turbinesPerMaintenanceVessel) || 0,
     };
 
-    // Combine profile and settings for saving
+    // Data to save (excluding photoURL handled by upload)
     const dataToSave = {
         firstName: profile.firstName.trim(),
         lastName: profile.lastName.trim(),
@@ -129,7 +209,6 @@ const SettingsPage: React.FC = () => {
     }
 
     try {
-      // Use setDoc with merge: true to update/create the user document
       await setDoc(userDocRef, dataToSave, { merge: true });
       setSuccessMessage("Profile and settings saved successfully!");
     } catch (err: any) {
@@ -142,6 +221,7 @@ const SettingsPage: React.FC = () => {
 
   // Construct full name for display
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'User';
+  const initials = getInitials(profile.firstName, profile.lastName);
 
   // Render loading state
   if (isLoading) {
@@ -154,11 +234,54 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto"> 
-      {/* Display User Name */}
-      <h1 className="text-2xl font-semibold text-neutral-dark mb-2">
-        Settings for <span className="text-primary">{fullName}</span>
-      </h1>
-      <p className="text-sm text-gray-600 mb-6">Manage your profile and application settings.</p>
+      <div className="flex items-center mb-6 space-x-4">
+        {/* Avatar Display & Upload Trigger */}
+        <div className="relative group">
+          {photoURL ? (
+            <img 
+              src={photoURL}
+              alt={`${fullName} profile picture`}
+              className="w-16 h-16 rounded-full object-cover border-2 border-primary cursor-pointer" 
+              referrerPolicy="no-referrer"
+              onClick={handleAvatarClick}
+            />
+          ) : (
+            <div 
+              className="w-16 h-16 rounded-full bg-teal-light flex items-center justify-center text-white text-2xl font-semibold border-2 border-primary cursor-pointer"
+              onClick={handleAvatarClick}
+            >
+              {initials || '?'}
+            </div>
+          )}
+          {/* Hidden file input */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handlePhotoUpload} 
+            className="hidden" 
+            accept="image/*" // Accept only images
+            disabled={isUploadingPhoto} 
+           />
+           {/* Optional: Upload overlay/icon */}
+           <div className="absolute inset-0 rounded-full bg-black bg-opacity-0 group-hover:bg-opacity-40 flex items-center justify-center transition-opacity duration-200 cursor-pointer" onClick={handleAvatarClick}>
+                <span className="text-white opacity-0 group-hover:opacity-100 text-xs">Change</span>
+           </div>
+           {/* Upload Progress Indicator (Optional) */}
+           {isUploadingPhoto && (
+               <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black bg-opacity-60">
+                    <span className="text-white text-xs">{uploadProgress.toFixed(0)}%</span>
+                    {/* Add a spinner maybe */} 
+               </div>
+           )}
+        </div>
+        {/* User Name Heading */}
+        <div>
+          <h1 className="text-2xl font-semibold text-neutral-dark">
+            Settings for <span className="text-primary">{fullName}</span>
+          </h1>
+          <p className="text-sm text-gray-600">Manage your profile and application settings.</p>
+        </div>
+      </div>
 
       <form onSubmit={handleSave} className="space-y-8 bg-white p-6 rounded-lg shadow">
         {/* Profile Section */}
